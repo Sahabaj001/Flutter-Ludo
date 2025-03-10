@@ -69,6 +69,9 @@ class _RootState extends State<Root> {
       precacheImage(const AssetImage("assets/images/crown/1st.jpg"), context),
       precacheImage(const AssetImage("assets/images/crown/2nd.jpg"), context),
       precacheImage(const AssetImage("assets/images/crown/3rd.jpg"), context),
+      precacheImage(const AssetImage("assets/images/background04.jpg"), context),
+      precacheImage(const AssetImage("assets/icon/logo01.png"), context),
+
     ]).catchError((error) {
       print('Error precaching images: $error');
     });

@@ -38,14 +38,13 @@ flutter:
     - assets/images/dice/
     - assets/images/
     - assets/images/crown/
-    - assets/images/background.jpg
     - assets/music/
     - assets/sounds/
     - assets/sounds/move.wav
     - assets/sounds/kill.wav
     - assets/sounds/roll_the_dice.mp3
     - assets/sounds/level-up.mp3
-    - assets/icon/icon.png
+    - assets/icon/
 
   fonts:
     - family: Permanent Marker

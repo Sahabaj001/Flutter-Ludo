@@ -5,54 +5,56 @@ import 'package:provider/provider.dart';
 import 'package:basic/audio/audio.dart';
 import 'constants.dart';
 import 'package:basic/settings/settings_controller.dart';
+
 class LudoProvider extends ChangeNotifier {
   final SettingsController _settingsController;
 
   LudoProvider(this._settingsController);
-  ///flags to check if pawn is moving
-  bool _isMoving = false;
 
-  ///flags to stop pawn once disposed
-  bool _stopMoving = false;
-  //bool _isRolling = false; // New flag to prevent rapid dice rolls
+  // ==================== Game State and Properties ====================
 
+  /// Current game state (throw dice, pick pawn, moving, finish)
   LudoGameState _gameState = LudoGameState.throwDice;
-
-  ///game state to check if the game is in throw dice state or pick pawn state
   LudoGameState get gameState => _gameState;
 
+  /// Current player's turn
   LudoPlayerType _currentTurn = LudoPlayerType.green;
 
+  /// Index of the current player (0: green, 1: yellow, 2: blue, 3: red)
+  int _currentPlayerIndex = 0;
+  int get currentPlayerIndex => _currentPlayerIndex;
+
+  /// Number of players in the game (2, 3, or 4)
+  int _numberOfPlayers = 2;
+  int get numberOfPlayers => _numberOfPlayers;
+
+  /// List of players in the game
+  final List<LudoPlayer> players = [];
+
+  /// List of winners
+  final List<LudoPlayerType> winners = [];
+
+  /// Current dice result
   int _diceResult = 0;
+  int get diceResult => _diceResult.clamp(1, 6); // Ensure dice result is between 1 and 6
 
-  ///dice result to check the dice result of the current turn
-  int get diceResult {
-    if (_diceResult < 1) {
-      return 1;
-    } else {
-      if (_diceResult > 6) {
-        return 6;
-      } else {
-        return _diceResult;
-      }
-    }
-  }
-
-
+  /// Flag to check if dice is rolling
   bool _diceStarted = false;
   bool get diceStarted => _diceStarted;
 
+  /// Flags to manage pawn movement
+  bool _isMoving = false;
+  bool _stopMoving = false;
+
+  // ==================== Player and Pawn Management ====================
+
+  /// Get the current player
   LudoPlayer get currentPlayer => players.firstWhere((element) => element.type == _currentTurn);
 
-  ///Fill all players
-  final List<LudoPlayer> players = [];
-
-  ///Player win, we use `LudoPlayerType` to make it easier to check
-  final List<LudoPlayerType> winners = [];
-
+  /// Get a player by type
   LudoPlayer player(LudoPlayerType type) => players.firstWhere((element) => element.type == type);
 
-  ///This method will check if the pawn can kill another pawn or not by checking the step of the pawn
+  /// Check if a pawn can kill another pawn
   bool checkToKill(LudoPlayerType type, int index, int step, List<List<double>> path) {
     bool killSomeone = false;
     for (int i = 0; i < 4; i++) {
@@ -93,45 +95,66 @@ class LudoProvider extends ChangeNotifier {
     return killSomeone;
   }
 
-  ///This is the function that will be called to throw the dice
+  // ==================== Dice and Turn Management ====================
+
+  /// Roll the dice
   void throwDice() async {
-    if (_gameState != LudoGameState.throwDice) return;
+    // Prevent multiple clicks or concurrent executions
+    if (_gameState != LudoGameState.throwDice || _diceStarted) return;
+
+    // Block further clicks immediately
     _diceStarted = true;
     notifyListeners();
-    Audio.rollDice();
 
-    //Check if already win skip
-    if (winners.contains(currentPlayer.type)) {
-      nextTurn();
-      return;
-    }
+    try {
+      Audio.rollDice(); // Play dice roll sound
 
-    //Turn off highlight for all pawns
-    currentPlayer.highlightAllPawns(false);
+      // Skip turn if player already won
+      if (winners.contains(currentPlayer.type)) {
+        nextTurn();
+        return;
+      }
 
-    Future.delayed(const Duration(seconds: 1)).then((value) {
+      // Turn off pawn highlights
+      currentPlayer.highlightAllPawns(false);
+
+      // Simulate dice rolling delay
+      await Future.delayed(const Duration(seconds: 1));
+
+      // Generate dice result
+      _diceResult = Random().nextInt(6) + 1;
+      notifyListeners();
+// Reset `_diceStarted` immediately after dice result is determined
       _diceStarted = false;
-      var random = Random();
-      _diceResult = random.nextInt(6) + 1;
       notifyListeners();
 
+      // Handle dice result
       if (diceResult == 6) {
-        currentPlayer.highlightAllPawns();
-        _gameState = LudoGameState.pickPawn;
-        notifyListeners();
-      } else {
-        /// all pawns are inside home
         if (currentPlayer.pawnInsideCount == 4) {
-          return nextTurn();  // Skips turn if all pawns are inside
+          // Only highlight pawns inside home when all are in
+          currentPlayer.highlightInside();
+        } else if (currentPlayer.pawnInsideCount > 0) {
+          // Highlight both pawns inside and outside home
+          currentPlayer.highlightAllPawns();
         } else {
-          ///Hightlight all pawn outside
+          // No pawns inside home, highlight only outside pawns
+          currentPlayer.highlightOutside();
+        }
+        _gameState = LudoGameState.pickPawn;
+      } else {
+        if (currentPlayer.pawnInsideCount == 4) {
+          await Future.delayed(const Duration(seconds: 1)); // Add delay here
+          nextTurn(); // Skip turn if all pawns are inside
+          return;
+        } else {
           currentPlayer.highlightOutside();
           _gameState = LudoGameState.pickPawn;
-          notifyListeners();
         }
       }
 
-      ///Check and disable if any pawn already in the finish box
+      notifyListeners();
+
+      // Disable highlight for pawns exceeding finish box
       for (var i = 0; i < currentPlayer.pawns.length; i++) {
         var pawn = currentPlayer.pawns[i];
         if ((pawn.step + diceResult) > currentPlayer.path.length - 1) {
@@ -139,42 +162,54 @@ class LudoProvider extends ChangeNotifier {
         }
       }
 
-      ///Automatically move random pawn if all pawn are in same step
-      var moveablePawn = currentPlayer.pawns.where((e) => e.highlight).toList();
-      if (moveablePawn.length > 1) {
-        var biggestStep = moveablePawn.map((e) => e.step).reduce(max);
-        if (moveablePawn.every((element) => element.step == biggestStep)) {
-          var random = 1 + Random().nextInt(moveablePawn.length - 1);
-          if (moveablePawn[random].step == -1) {
-            var thePawn = moveablePawn[random];
-            move(thePawn.type, thePawn.index, (thePawn.step + 1) + 1);
-            return;
+      // Auto-move if all pawns are on the same step
+      var moveablePawns = currentPlayer.pawns.where((e) => e.highlight).toList();
+      if (moveablePawns.length > 1) {
+        var maxStep = moveablePawns.map((e) => e.step).reduce(max);
+        if (moveablePawns.every((p) => p.step == maxStep)) {
+          var randomIndex = Random().nextInt(moveablePawns.length);
+          var selectedPawn = moveablePawns[randomIndex];
+          if (selectedPawn.step == -1) {
+            // Move pawn out of home (step = 0)
+            move(selectedPawn.type, selectedPawn.index, 0);
           } else {
-            var thePawn = moveablePawn[random];
-            move(thePawn.type, thePawn.index, (thePawn.step + 1) + diceResult);
-            return;
+            // Move pawn 6 steps ahead
+            move(selectedPawn.type, selectedPawn.index, selectedPawn.step + 1 + diceResult);
           }
+          return;
         }
       }
 
-      ///If User have 6 dice, but it inside finish line, it will make him to throw again, else it will turn to next player
-      if (currentPlayer.pawns.every((element) => !element.highlight)) {
+      // Handle turn switching
+      if (currentPlayer.pawns.every((p) => !p.highlight)) {
         if (diceResult == 6) {
           _gameState = LudoGameState.throwDice;
         } else {
+          // Delay before switching to the next player
+          await Future.delayed(const Duration(seconds: 1)); // Add delay here
           nextTurn();
           return;
         }
       }
 
-      if (currentPlayer.pawns.where((element) => element.highlight).length == 1) {
-        var index = currentPlayer.pawns.indexWhere((element) => element.highlight);
-        move(currentPlayer.type, index, (currentPlayer.pawns[index].step + 1) + diceResult);
+      // If only one pawn is highlighted, move it automatically
+      if (currentPlayer.pawns.where((p) => p.highlight).length == 1) {
+        var index = currentPlayer.pawns.indexWhere((p) => p.highlight);
+        if (currentPlayer.pawns[index].step == -1) {
+          // Move pawn out of home (step = 0)
+          move(currentPlayer.type, index, 0);
+        } else {
+          // Move pawn 6 steps ahead
+          move(currentPlayer.type, index, currentPlayer.pawns[index].step + 1 + diceResult);
+        }
       }
-    });
+    } finally {
+      // Ensure `_diceStarted` is reset even if an error occurs
+      _diceStarted = false;
+      notifyListeners();
+    }
   }
-
-  ///Move pawn to next step and check if it can kill other pawn
+  /// Move pawn to the next step
   void move(LudoPlayerType type, int index, int step) async {
     if (_isMoving) return;
     _isMoving = true;
@@ -184,6 +219,23 @@ class LudoProvider extends ChangeNotifier {
 
     var selectedPlayer = player(type);
 
+    // Ensure the pawn index is valid
+    if (index < 0 || index >= selectedPlayer.pawns.length) {
+      print("Invalid pawn index: $index. Skipping move.");
+      _isMoving = false;
+      return;
+    }
+
+    // Move pawn out of home (step = 0)
+    if (step == 0) {
+      selectedPlayer.movePawn(index, 0);
+      notifyListeners();
+      _isMoving = false;
+      _gameState = LudoGameState.throwDice;
+      return;
+    }
+
+    // Move pawn step by step
     for (int i = selectedPlayer.pawns[index].step; i < step; i++) {
       if (_stopMoving) break;
 
@@ -197,7 +249,7 @@ class LudoProvider extends ChangeNotifier {
         await Audio.playMove();
       }
 
-      notifyListeners();  // Update UI
+      notifyListeners(); // Update UI
       await Future.delayed(const Duration(milliseconds: 400));
 
       if (_stopMoving) break;
@@ -240,31 +292,38 @@ class LudoProvider extends ChangeNotifier {
     notifyListeners();
     _isMoving = false;
   }
-
-
-  ///Next turn will be called when the player finish the turn
+  /// Switch to the next player's turn
   void nextTurn() {
     switch (_currentTurn) {
       case LudoPlayerType.green:
         _currentTurn = LudoPlayerType.yellow;
+        _currentPlayerIndex = 1;
         break;
       case LudoPlayerType.yellow:
         _currentTurn = LudoPlayerType.blue;
+        _currentPlayerIndex = 2;
         break;
       case LudoPlayerType.blue:
         _currentTurn = LudoPlayerType.red;
+        _currentPlayerIndex = 3;
         break;
       case LudoPlayerType.red:
         _currentTurn = LudoPlayerType.green;
+        _currentPlayerIndex = 0;
         break;
     }
 
-    if (winners.contains(_currentTurn)) return nextTurn();
+    // Skip the turn if the next player has already won
+    if (winners.contains(_currentTurn)) {
+      nextTurn();
+      return;
+    }
+
     _gameState = LudoGameState.throwDice;
     notifyListeners();
   }
 
-  ///This function will check if the pawn finish the game or not
+  /// Check if the current player has won
   void validateWin(LudoPlayerType color) {
     if (winners.map((e) => e.name).contains(color.name)) return;
     if (player(color).pawns.map((e) => e.step).every((element) => element == player(color).path.length - 1)) {
@@ -274,20 +333,43 @@ class LudoProvider extends ChangeNotifier {
 
     if (winners.length == 3) {
       _gameState = LudoGameState.finish;
-
     }
   }
 
-  void startGame() {
+  // ==================== Game Initialization ====================
+
+  /// Start a new game with the specified number of players
+  void startGame([int? numberOfPlayers]) {
+    // Validate the number of players
+    if (numberOfPlayers != null && (numberOfPlayers < 2 || numberOfPlayers > 4)) {
+      throw ArgumentError("Number of players must be between 2 and 4.");
+    }
+
+    // Use the provided number of players or the stored value
+    _numberOfPlayers = numberOfPlayers ?? _numberOfPlayers;
     winners.clear();
     players.clear();
-    players.addAll([
-      LudoPlayer(LudoPlayerType.green),
-      LudoPlayer(LudoPlayerType.yellow),
-      LudoPlayer(LudoPlayerType.blue),
-      LudoPlayer(LudoPlayerType.red),
-    ]);
+
+    // Add players based on the selected number
+    if (_numberOfPlayers >= 2) {
+      players.add(LudoPlayer(LudoPlayerType.green));
+      players.add(LudoPlayer(LudoPlayerType.yellow));
+    }
+    if (_numberOfPlayers >= 3) {
+      players.add(LudoPlayer(LudoPlayerType.blue));
+    }
+    if (_numberOfPlayers >= 4) {
+      players.add(LudoPlayer(LudoPlayerType.red));
+    }
+
+    _currentPlayerIndex = 0; // Reset to green player
+    _currentTurn = LudoPlayerType.green; // Reset to green player
+    _gameState = LudoGameState.throwDice; // Reset game state
+    notifyListeners();
+
   }
+
+  // ==================== Cleanup ====================
 
   @override
   void dispose() {

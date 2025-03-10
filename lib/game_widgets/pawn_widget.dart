@@ -57,14 +57,32 @@ class PawnWidget extends StatelessWidget {
                 decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: color, width: 2)
 
                 ),
-                child: Container(
+                child: SizedBox(
                   width: 18,
                   height: 18,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
+                    child: Stack(
+                      alignment: Alignment.center, // Center the dot inside the pawn
+                      children: [
+                        // Outer circle (pawn)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: color, // Pawn color
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                        ),
+
+                        // Inner dot
+                        Container(
+                          width: 10, // Adjust the size of the dot
+                          height: 10, // Adjust the size of the dot
+                          decoration: BoxDecoration(
+                            color: Colors.black, // Dot color
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    )
                 ),
               ),
             ),

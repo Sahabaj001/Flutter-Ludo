@@ -20,15 +20,14 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
-        // Provide SettingsController
         ChangeNotifierProvider<SettingsController>(
           create: (_) => settingsController,
         ),
-        // Provide LudoProvider
+
         ChangeNotifierProvider<LudoProvider>(
           create: (_) => LudoProvider(settingsController)..startGame(),
         ),
-        // Provide Palette
+
         Provider<Palette>(
           create: (_) => Palette(),
         ),
@@ -49,7 +48,6 @@ class _RootState extends State<Root> {
   @override
   void initState() {
     super.initState();
-    // Precache images after the first frame is rendered
     SchedulerBinding.instance.addPostFrameCallback((_) {
       _precacheImages();
     });

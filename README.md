@@ -1,5 +1,5 @@
 # Flutter-Ludo
-This project is a simplified Ludo game built with Flutter, designed to provide an engaging user experience and an intuitive interface. The app features a structured layout with a Main Menu, a Settings Screen, and the Gameplay Screen, each organized into separate folders to maintain code modularity and readability.    
+This project is a simplified Ludo game built with Flutter, designed to provide an engaging user experience and an intuitive interface. The app features a structured layout with a Main Menu, a Player Selection Screen, a Settings Screen, and the Gameplay Screen, each organized into separate folders to maintain code modularity and readability.    
 Key Features:  
 Main Menu: From here, users can easily start a new game or access the settings. <br>
 ![WhatsApp Image 2025-03-10 at 4 54 55 PM](https://github.com/user-attachments/assets/1aae49cf-b5c0-4e54-a3c3-16da94d2cac0)
